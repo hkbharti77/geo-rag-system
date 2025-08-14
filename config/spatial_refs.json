@@ -1,0 +1,5 @@
+{
+  "default": "EPSG:4326",
+  "web_mercator": "EPSG:3857",
+  "utm_example": "EPSG:32633"
+}

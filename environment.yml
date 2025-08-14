@@ -1,0 +1,21 @@
+name: app
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - geopandas
+  - rasterio
+  - shapely
+  - pyproj
+  - gdal
+  - fiona
+  - libspatialindex
+  - geos
+  - proj
+  - sqlite
+  - curl
+  - pip:
+      - -r requirements.txt
+
+

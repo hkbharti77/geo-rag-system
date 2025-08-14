@@ -1,0 +1,36 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pytest
+.cache/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Data & indexes
+/data/processed/
+/data/raw/
+/data/sample_data/
+
+# ChromaDB
+chroma_db/
+
+# Raster temp files
+*.aux.xml
+*.ovr
+*.idx

@@ -1,0 +1,6 @@
+{
+  "text_embedding": "sentence-transformers/all-MiniLM-L6-v2",
+  "image_embedding": "openai/clip-vit-base-patch32",
+  "vector_store": "chroma",
+  "tile_size": 256
+}
