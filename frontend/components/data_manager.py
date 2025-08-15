@@ -143,31 +143,13 @@ def show_workflow_guide():
         - Upload your geographic file
         - Or use sample data to get started
         
-        **2. 🗺️ Create Chunks**
-        - Choose grid or clustering strategy
-        - This divides your area into manageable regions
-        
-        **3. 🔍 Index Data**
+        **2. 🔍 Index Data**
         - Click "Index Current Data" to make it searchable
         
-        **4. 🔎 Query & Explore**
+        **3. 🔎 Query & Explore**
         - Use semantic search for natural language queries
         - Use spatial queries for location-based searches
         - View results on the interactive map
         """)
     
-    # Show current status
-    st.sidebar.subheader("📈 Current Status")
-    
-    # This would be populated based on actual state
-    status_items = [
-        ("📁 Data Loaded", "No"),
-        ("🗺️ Chunks Created", "No"), 
-        ("🔍 Data Indexed", "No"),
-        ("🎯 Ready to Query", "No")
-    ]
-    
-    for item, status in status_items:
-        col1, col2 = st.sidebar.columns([3, 1])
-        col1.write(item)
-        col2.write(f"**{status}**")
+

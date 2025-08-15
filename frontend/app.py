@@ -4,6 +4,7 @@ import streamlit as st
 from streamlit_folium import st_folium
 import folium
 import geopandas as gpd
+import pandas as pd
 
 from config.settings import PROJECT_ROOT, SAMPLE_DATA_DIR, CHROMA_DIR, RAW_DIR
 from src.utils.file_handlers import read_vector_file
@@ -20,6 +21,187 @@ from frontend.components.query_interface import chunking_controls
 from frontend.components.advanced_queries import advanced_search_interface
 from frontend.components.enhanced_map import create_map_interface, display_map_with_controls
 from frontend.components.results_display import display_search_results, display_spatial_results
+
+# Import geographic analysis functionality
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
+from analysis import AnalysisManager
+
+# Helper functions for geographic analysis (defined early to avoid NameError)
+def _load_uploaded_data_for_analysis(uploaded_file):
+    """Load uploaded geographic data for analysis."""
+    try:
+        if uploaded_file.name.endswith('.csv'):
+            data = pd.read_csv(uploaded_file)
+            # Try to create geometry from lat/lon columns
+            if 'latitude' in data.columns and 'longitude' in data.columns:
+                data['geometry'] = gpd.points_from_xy(data['longitude'], data['latitude'])
+                data = gpd.GeoDataFrame(data, crs="EPSG:4326")
+        elif uploaded_file.name.endswith('.geojson'):
+            data = gpd.read_file(uploaded_file)
+        elif uploaded_file.name.endswith('.shp'):
+            data = gpd.read_file(uploaded_file)
+        else:
+            st.error("❌ Unsupported file format")
+            return None
+        
+        return data
+    except Exception as e:
+        st.error(f"❌ Error loading file: {str(e)}")
+        return None
+
+def _create_sample_data_for_analysis():
+    """Create sample geographic data for analysis demonstration."""
+    import numpy as np
+    import pandas as pd
+    
+    # Create sample point data
+    np.random.seed(42)
+    n_points = 100
+    
+    # Generate random coordinates
+    lats = np.random.uniform(40.0, 42.0, n_points)
+    lons = np.random.uniform(-74.0, -72.0, n_points)
+    
+    # Create sample attributes
+    data = {
+        'id': range(n_points),
+        'latitude': lats,
+        'longitude': lons,
+        'population': np.random.poisson(1000, n_points),
+        'elevation': np.random.normal(100, 50, n_points),
+        'temperature': np.random.normal(20, 5, n_points),
+        'precipitation': np.random.exponential(10, n_points),
+        'timestamp': pd.date_range('2024-01-01', periods=n_points, freq='D')
+    }
+    
+    # Create GeoDataFrame
+    gdf = gpd.GeoDataFrame(
+        data,
+        geometry=gpd.points_from_xy(data['longitude'], data['latitude']),
+        crs="EPSG:4326"
+    )
+    
+    return gdf
+
+def _display_quick_stats_for_analysis(data):
+    """Display quick statistics about the data for analysis."""
+    stats = {
+        "Total Records": len(data),
+        "Geometry Type": str(data.geometry.geom_type.iloc[0]) if hasattr(data, 'geometry') else "N/A",
+        "CRS": str(data.crs) if hasattr(data, 'crs') else "N/A",
+        "Columns": len(data.columns)
+    }
+    
+    for key, value in stats.items():
+        st.metric(key, value)
+    
+    # Display data bounds
+    if hasattr(data, 'total_bounds'):
+        bounds = data.total_bounds
+        st.markdown("**Spatial Extent:**")
+        st.write(f"Min: ({bounds[0]:.4f}, {bounds[1]:.4f})")
+        st.write(f"Max: ({bounds[2]:.4f}, {bounds[3]:.4f})")
+
+def _run_analysis(data, analysis_types):
+    """Run the selected analysis types."""
+    # Convert analysis type names to internal names
+    type_mapping = {
+        "Spatial Statistics": "spatial",
+        "Temporal Analysis": "temporal",
+        "Elevation Processing": "elevation",
+        "Weather Integration": "weather",
+        "Population Density": "population",
+        "Transportation Networks": "transportation"
+    }
+    
+    internal_types = [type_mapping[atype] for atype in analysis_types if atype in type_mapping]
+    
+    # Run analysis using the analysis manager
+    results = st.session_state.analysis_manager.run_comprehensive_analysis(data, internal_types)
+    
+    return results
+
+def _export_analysis_results(results):
+    """Export analysis results."""
+    # Create download button for JSON results
+    results_json = json.dumps(results, indent=2, default=str)
+    
+    st.download_button(
+        label="📥 Download Results (JSON)",
+        data=results_json,
+        file_name="geographic_analysis_results.json",
+        mime="application/json"
+    )
+
+def _display_analysis_results(results):
+    """Display analysis results in an organized way."""
+    # Create tabs for different analysis types
+    if results:
+        tab_names = list(results.keys())
+        tabs = st.tabs([name.replace('_', ' ').title() for name in tab_names])
+        
+        for i, (analysis_name, analysis_results) in enumerate(results.items()):
+            with tabs[i]:
+                _display_specific_analysis(analysis_name, analysis_results)
+
+def _display_specific_analysis(analysis_name, analysis_results):
+    """Display results for a specific analysis type."""
+    if isinstance(analysis_results, dict):
+        if 'error' in analysis_results:
+            st.error(f"❌ {analysis_results['error']}")
+            return
+        
+        # Display key metrics
+        st.subheader("📊 Key Metrics")
+        
+        # Create columns for metrics
+        cols = st.columns(3)
+        col_idx = 0
+        
+        for key, value in analysis_results.items():
+            if isinstance(value, dict) and key not in ['error']:
+                # Display nested metrics
+                with cols[col_idx % 3]:
+                    st.metric(key.replace('_', ' ').title(), f"{len(value)} sub-metrics")
+                col_idx += 1
+            elif isinstance(value, (int, float)):
+                with cols[col_idx % 3]:
+                    st.metric(key.replace('_', ' ').title(), f"{value:.4f}" if isinstance(value, float) else value)
+                col_idx += 1
+        
+        # Display detailed results
+        st.subheader("📋 Detailed Results")
+        
+        for key, value in analysis_results.items():
+            if isinstance(value, dict) and key not in ['error']:
+                with st.expander(f"📁 {key.replace('_', ' ').title()}"):
+                    _display_nested_results(value)
+            elif isinstance(value, (list, tuple)):
+                with st.expander(f"📁 {key.replace('_', ' ').title()}"):
+                    st.write(f"Number of items: {len(value)}")
+                    if len(value) > 0 and isinstance(value[0], dict):
+                        try:
+                            st.dataframe(pd.DataFrame(value))
+                        except Exception as e:
+                            st.write("Data preview (table format not available):")
+                            st.json(value[:5])  # Show first 5 items as JSON
+
+def _display_nested_results(nested_dict):
+    """Display nested dictionary results."""
+    for key, value in nested_dict.items():
+        if isinstance(value, dict):
+            st.markdown(f"**{key.replace('_', ' ').title()}:**")
+            for sub_key, sub_value in value.items():
+                if isinstance(sub_value, (int, float)):
+                    st.write(f"  {sub_key}: {sub_value:.4f}" if isinstance(sub_value, float) else f"  {sub_key}: {sub_value}")
+                else:
+                    st.write(f"  {sub_key}: {sub_value}")
+        elif isinstance(value, (int, float)):
+            st.metric(key.replace('_', ' ').title(), f"{value:.4f}" if isinstance(value, float) else value)
+        else:
+            st.write(f"**{key.replace('_', ' ').title()}:** {value}")
 
 
 # Page configuration
@@ -75,6 +257,10 @@ if 'spatial_results' not in st.session_state:
     st.session_state.spatial_results = None
 if 'data_indexed' not in st.session_state:
     st.session_state.data_indexed = False
+if 'analysis_results' not in st.session_state:
+    st.session_state.analysis_results = None
+if 'analysis_manager' not in st.session_state:
+    st.session_state.analysis_manager = AnalysisManager()
 
 # Sidebar with enhanced data management
 with st.sidebar:
@@ -187,7 +373,7 @@ if st.session_state.current_data is not None and len(st.session_state.current_da
             st.metric("Search Status", status)
     
     # Tabs for different functionalities
-    tab1, tab2, tab3, tab4 = st.tabs(["🗺️ Map View", "🔍 Search & Query", "🗂️ Chunking", "📈 Analysis"])
+    tab1, tab2, tab3 = st.tabs(["🗺️ Map View", "🔍 Search & Query", "📈 Analysis"])
     
     with tab1:
         # Enhanced map interface
@@ -198,20 +384,17 @@ if st.session_state.current_data is not None and len(st.session_state.current_da
         """, unsafe_allow_html=True)
         
         # Map controls
-        col1, col2, col3 = st.columns(3)
+        col1, col2 = st.columns(2)
         with col1:
-            show_chunks = st.checkbox("Show Chunks", value=False)
-        with col2:
             show_search_results = st.checkbox("Show Search Results", value=True)
-        with col3:
+        with col2:
             show_spatial_results = st.checkbox("Show Spatial Results", value=True)
         
         # Create and display map
         m = create_map_interface(
             gdf=st.session_state.current_data,
             search_results=st.session_state.search_results if show_search_results else None,
-            spatial_results=st.session_state.spatial_results if show_spatial_results else None,
-            show_chunks=show_chunks
+            spatial_results=st.session_state.spatial_results if show_spatial_results else None
         )
         
         # Display map with controls
@@ -273,33 +456,155 @@ if st.session_state.current_data is not None and len(st.session_state.current_da
             st.info("Go to the sidebar and click 'Index Current Data'")
     
     with tab3:
-        # Chunking interface
-        st.markdown("""
-        <div class="feature-card">
-            <h3>🗂️ Geographic Chunking Strategies</h3>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        chunking_controls(st.session_state.current_data)
-    
-    with tab4:
-        # Analysis tab (placeholder for future features)
+        # Geographic Analysis Interface
         st.markdown("""
         <div class="feature-card">
             <h3>📈 Geographic Analysis</h3>
         </div>
         """, unsafe_allow_html=True)
         
-        st.info("🚧 Analysis features coming soon!")
-        st.markdown("""
-        **Planned Features:**
-        - **Spatial Statistics**: Density analysis, clustering metrics
-        - **Temporal Analysis**: Time-series geographic data
-        - **Elevation Processing**: Terrain and elevation analysis
-        - **Weather Integration**: Climate and weather data overlay
-        - **Population Density**: Demographic analysis
-        - **Transportation Networks**: Route and accessibility analysis
-        """)
+        # Analysis configuration sidebar
+        with st.sidebar:
+            st.header("🔧 Analysis Configuration")
+            
+            # Analysis type selection
+            analysis_types = st.multiselect(
+                "Select Analysis Types",
+                options=[
+                    "Spatial Statistics",
+                    "Temporal Analysis", 
+                    "Elevation Processing",
+                    "Weather Integration",
+                    "Population Density",
+                    "Transportation Networks"
+                ],
+                default=["Spatial Statistics"]
+            )
+            
+            # Analysis parameters
+            st.subheader("📊 Analysis Parameters")
+            
+            # Spatial analysis parameters
+            if "Spatial Statistics" in analysis_types:
+                st.markdown("**Spatial Statistics Parameters:**")
+                cell_size = st.slider("Cell Size (meters)", 100, 5000, 1000)
+                clustering_method = st.selectbox("Clustering Method", ["kmeans", "dbscan"])
+                n_clusters = st.slider("Number of Clusters", 2, 10, 5)
+            
+            # Temporal analysis parameters
+            if "Temporal Analysis" in analysis_types:
+                st.markdown("**Temporal Analysis Parameters:**")
+                analysis_period = st.selectbox("Analysis Period", ["daily", "weekly", "monthly", "seasonal"])
+                max_lag = st.slider("Maximum Lag", 5, 20, 10)
+            
+            # Elevation analysis parameters
+            if "Elevation Processing" in analysis_types:
+                st.markdown("**Elevation Processing Parameters:**")
+                dem_cell_size = st.slider("DEM Cell Size (meters)", 10, 100, 30)
+                roughness_window = st.slider("Roughness Window Size", 3, 11, 5)
+            
+            # Weather analysis parameters
+            if "Weather Integration" in analysis_types:
+                st.markdown("**Weather Integration Parameters:**")
+                weather_distance = st.slider("Weather Distance Threshold (meters)", 500, 5000, 1000)
+            
+            # Population analysis parameters
+            if "Population Density" in analysis_types:
+                st.markdown("**Population Analysis Parameters:**")
+                pop_cell_size = st.slider("Population Cell Size (meters)", 500, 2000, 1000)
+            
+            # Transportation analysis parameters
+            if "Transportation Networks" in analysis_types:
+                st.markdown("**Transportation Analysis Parameters:**")
+                service_radius = st.slider("Service Radius (meters)", 500, 5000, 1000)
+        
+        # Main analysis content
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            st.subheader("🗺️ Data Input")
+            
+            # Use current data or allow new upload
+            if st.session_state.current_data is not None:
+                st.success(f"✅ Using current data! Shape: {st.session_state.current_data.shape}")
+                data = st.session_state.current_data
+                # Convert GeoDataFrame to DataFrame for display (excluding geometry column)
+                if hasattr(data, 'geometry'):
+                    display_data = data.drop(columns=['geometry'])
+                    st.dataframe(display_data.head())
+                else:
+                    st.dataframe(data.head())
+            else:
+                # File upload for analysis
+                uploaded_file = st.file_uploader(
+                    "Upload Geographic Data for Analysis (GeoJSON, Shapefile, CSV)",
+                    type=['geojson', 'shp', 'csv'],
+                    help="Upload your geographic data file for analysis"
+                )
+                
+                # Sample data option
+                use_sample_data = st.checkbox("Use Sample Data for Demonstration")
+                
+                if uploaded_file is not None:
+                    data = _load_uploaded_data_for_analysis(uploaded_file)
+                    if data is not None:
+                        st.success(f"✅ Data loaded successfully! Shape: {data.shape}")
+                        if hasattr(data, 'geometry'):
+                            display_data = data.drop(columns=['geometry'])
+                            st.dataframe(display_data.head())
+                        else:
+                            st.dataframe(data.head())
+                elif use_sample_data:
+                    data = _create_sample_data_for_analysis()
+                    st.success("✅ Sample data created for demonstration!")
+                    if hasattr(data, 'geometry'):
+                        display_data = data.drop(columns=['geometry'])
+                        st.dataframe(display_data.head())
+                    else:
+                        st.dataframe(data.head())
+                else:
+                    data = None
+                    st.info("📁 Please upload data or select sample data to begin analysis")
+        
+        with col2:
+            st.subheader("📈 Quick Stats")
+            if data is not None:
+                _display_quick_stats_for_analysis(data)
+        
+        # Analysis execution
+        if data is not None:
+            st.markdown("---")
+            st.subheader("🚀 Run Analysis")
+            
+            col1, col2, col3 = st.columns([1, 1, 1])
+            
+            with col1:
+                if st.button("🔍 Run Selected Analysis", type="primary"):
+                    with st.spinner("Running analysis..."):
+                        results = _run_analysis(data, analysis_types)
+                        st.session_state.analysis_results = results
+                        st.success("✅ Analysis completed!")
+            
+            with col2:
+                if st.button("📊 Generate Report"):
+                    if st.session_state.analysis_results:
+                        report = st.session_state.analysis_manager.get_analysis_report()
+                        st.text_area("📋 Analysis Report", report, height=400)
+                    else:
+                        st.warning("⚠️ No analysis results available. Run analysis first.")
+            
+            with col3:
+                if st.button("💾 Export Results"):
+                    if st.session_state.analysis_results:
+                        _export_analysis_results(st.session_state.analysis_results)
+                    else:
+                        st.warning("⚠️ No analysis results available. Run analysis first.")
+        
+        # Results display
+        if st.session_state.analysis_results:
+            st.markdown("---")
+            st.subheader("📊 Analysis Results")
+            _display_analysis_results(st.session_state.analysis_results)
 
 else:
     # Welcome screen when no data is loaded
@@ -333,9 +638,8 @@ else:
         ### 🚀 Quick Start
         1. **Upload Data**: Use the sidebar to upload your file
         2. **Index Data**: Click "Index Current Data" to make it searchable
-        3. **Create Chunks**: Divide your area into manageable regions
-        4. **Search & Explore**: Use semantic and spatial queries
-        5. **Visualize**: View results on the interactive map
+        3. **Search & Explore**: Use semantic and spatial queries
+        4. **Visualize**: View results on the interactive map
         
         **Sample Data Available:**
         - US Cities (20 locations)
@@ -381,6 +685,8 @@ else:
         - Chunking strategies
         - Metadata extraction
         """)
+
+
 
 # Footer
 st.markdown("---")
