@@ -1,7 +1,13 @@
 import json
 from pathlib import Path
 import streamlit as st
-from streamlit_folium import st_folium
+# Import st_folium with a safe fallback to avoid hard dependency at app startup
+try:
+    from streamlit_folium import st_folium
+except Exception:
+    def st_folium(*args, **kwargs):
+        st.warning("streamlit-folium is not available; interactive map rendering is disabled.")
+        return None
 import folium
 import geopandas as gpd
 import pandas as pd
