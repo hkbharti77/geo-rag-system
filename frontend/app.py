@@ -104,8 +104,24 @@ with st.sidebar:
         if st.sidebar.button("📊 Index Current Data", type="primary"):
             with st.spinner("Indexing features..."):
                 try:
-                    # Initialize engines
-                    emb_manager = EmbeddingManager()
+                    # Initialize engines with error handling
+                    try:
+                        emb_manager = EmbeddingManager()
+                    except Exception as emb_error:
+                        error_msg = str(emb_error)
+                        if "Network error" in error_msg or "MaxRetryError" in error_msg or "getaddrinfo failed" in error_msg:
+                            st.sidebar.error("❌ Network connectivity issue")
+                            st.sidebar.error(f"Details: {error_msg}")
+                            st.sidebar.info("💡 Solutions:")
+                            st.sidebar.info("1. Check your internet connection")
+                            st.sidebar.info("2. Try using a VPN if you're behind a firewall")
+                            st.sidebar.info("3. The app will use a simple fallback mode")
+                            st.sidebar.info("4. Restart the app to try again")
+                        else:
+                            st.sidebar.error(f"❌ Failed to initialize embedding model: {error_msg}")
+                            st.sidebar.info("💡 Try restarting the app or check your PyTorch installation")
+                        st.stop()
+                    
                     text_store = VectorStore(persist_directory=CHROMA_DIR, collection_name="geographic_features")
                     
                     # Prepare data for indexing
@@ -222,11 +238,26 @@ if st.session_state.current_data is not None and len(st.session_state.current_da
         """, unsafe_allow_html=True)
         
         if st.session_state.data_indexed:
-            # Initialize engines for search
-            emb_manager = EmbeddingManager()
-            text_store = VectorStore(persist_directory=CHROMA_DIR, collection_name="geographic_features")
-            retrieval = RetrievalEngine(text_store=text_store, image_store=None, embeddings=emb_manager)
-            spatial_engine = SpatialQueryEngine(gdf=st.session_state.current_data)
+            # Initialize engines for search with error handling
+            try:
+                emb_manager = EmbeddingManager()
+                text_store = VectorStore(persist_directory=CHROMA_DIR, collection_name="geographic_features")
+                retrieval = RetrievalEngine(text_store=text_store, image_store=None, embeddings=emb_manager)
+                spatial_engine = SpatialQueryEngine(gdf=st.session_state.current_data)
+            except Exception as e:
+                error_msg = str(e)
+                if "Network error" in error_msg or "MaxRetryError" in error_msg or "getaddrinfo failed" in error_msg:
+                    st.error("❌ Network connectivity issue")
+                    st.error(f"Details: {error_msg}")
+                    st.info("💡 Solutions:")
+                    st.info("1. Check your internet connection")
+                    st.info("2. Try using a VPN if you're behind a firewall")
+                    st.info("3. The app will use a simple fallback mode")
+                    st.info("4. Restart the app to try again")
+                else:
+                    st.error(f"❌ Failed to initialize search engines: {error_msg}")
+                    st.info("💡 Try restarting the app or check your PyTorch installation")
+                st.stop()
             
             # Advanced search interface
             advanced_search_interface(retrieval, spatial_engine)

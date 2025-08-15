@@ -5,6 +5,14 @@ import json
 from typing import Dict, Any, List, Optional
 import pandas as pd
 
+# Import streamlit_folium with fallback
+try:
+    from streamlit_folium import st_folium
+except ImportError:
+    def st_folium(m, **kwargs):
+        st.warning("streamlit-folium not available. Please install with: pip install streamlit-folium")
+        return None
+
 
 def create_enhanced_map(gdf: gpd.GeoDataFrame, 
                        center: Optional[List[float]] = None,
@@ -349,10 +357,4 @@ def display_map_with_controls(m: folium.Map, height: int = 600):
     return map_data
 
 
-# Import for map functionality
-try:
-    from streamlit_folium import st_folium
-except ImportError:
-    def st_folium(m, **kwargs):
-        st.warning("streamlit-folium not available")
-        return None
+# Import for map functionality - moved to top of file

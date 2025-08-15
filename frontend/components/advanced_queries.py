@@ -310,20 +310,78 @@ def display_filtered_results(results: Dict[str, Any], query: str, threshold: flo
         st.warning(f"No results above similarity threshold ({threshold})")
         return
     
-    # Display results
+    # Display results in user-friendly format
     st.success(f"Found {len(filtered_results)} results for '{query}'")
     
     for i, result in enumerate(filtered_results):
-        with st.expander(f"#{i+1} - {result['document']} (Similarity: {result['similarity']:.3f})"):
-            st.write(f"**Document:** {result['document']}")
-            st.write(f"**Similarity:** {result['similarity']:.3f}")
-            if result['metadata']:
-                st.write("**Metadata:**")
-                st.json(result['metadata'])
+        # Calculate similarity percentage
+        similarity_pct = round(result['similarity'] * 100, 1)
+        
+        # Extract location information
+        metadata = result['metadata']
+        name = metadata.get("name", "Unknown Location")
+        lat = metadata.get("latitude") or metadata.get("miny")
+        lon = metadata.get("longitude") or metadata.get("minx")
+        
+        # Create a card for each result
+        with st.container():
+            st.markdown("---")
+            
+            # Header with rank and similarity
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                st.markdown(f"### #{i+1} - {name}")
+            with col2:
+                # Color code similarity
+                if similarity_pct >= 80:
+                    st.success(f"**{similarity_pct}%** Match")
+                elif similarity_pct >= 60:
+                    st.warning(f"**{similarity_pct}%** Match")
+                else:
+                    st.error(f"**{similarity_pct}%** Match")
+            
+            # Location information
+            if lat and lon:
+                # Format coordinates with direction
+                lat_dir = "N" if lat >= 0 else "S"
+                lon_dir = "E" if lon >= 0 else "W"
+                coord_str = f"{abs(lat):.4f}°{lat_dir}, {abs(lon):.4f}°{lon_dir}"
+                st.markdown(f"📍 **Location**: {coord_str}")
+                
+                # Add a map link
+                map_url = f"https://www.google.com/maps?q={lat},{lon}"
+                st.markdown(f"🗺️ [View on Google Maps]({map_url})")
+            
+            # Additional metadata in a clean format
+            if metadata:
+                st.markdown("**Details:**")
+                meta_display = {}
+                
+                # Filter and format metadata
+                for key, value in metadata.items():
+                    if key not in ['name', 'latitude', 'longitude', 'minx', 'miny', 'maxx', 'maxy']:
+                        # Format the key to be more readable
+                        formatted_key = key.replace('_', ' ').title()
+                        meta_display[formatted_key] = value
+                
+                # Display additional metadata in columns
+                if meta_display:
+                    cols = st.columns(min(3, len(meta_display)))
+                    for idx, (key, value) in enumerate(meta_display.items()):
+                        with cols[idx % len(cols)]:
+                            st.markdown(f"**{key}:** {value}")
+    
+    # Summary
+    st.markdown("---")
+    st.success(f"✅ Found **{len(filtered_results)}** result(s) for your search")
+    
+    # Show raw data in expander for developers
+    with st.expander("🔧 Raw Data (for developers)"):
+        st.json(results)
 
 
 def display_spatial_results(results: gpd.GeoDataFrame, query_description: str):
-    """Display spatial query results"""
+    """Display spatial query results in a user-friendly format"""
     
     if results is None or len(results) == 0:
         st.warning("No spatial results found")
@@ -334,17 +392,64 @@ def display_spatial_results(results: gpd.GeoDataFrame, query_description: str):
     
     st.success(f"Found {len(results)} features: {query_description}")
     
-    # Show results table
-    if 'name' in results.columns:
-        display_df = results[['name']].copy()
-        if 'geometry' in results.columns:
-            # Add centroid coordinates
-            centroids = results.geometry.centroid
-            display_df['latitude'] = centroids.y
-            display_df['longitude'] = centroids.x
-        st.dataframe(display_df, use_container_width=True)
-    else:
-        st.dataframe(results.drop(columns=['geometry']), use_container_width=True)
+    # Display results in a user-friendly format
+    for idx, row in results.iterrows():
+        # Extract properties, excluding geometry
+        props = {k: v for k, v in row.items() if k != 'geometry'}
+        name = props.get('name', f'Feature {idx}')
+        
+        # Get coordinates from geometry if available
+        if hasattr(row.geometry, 'x') and hasattr(row.geometry, 'y'):
+            lat_coord = row.geometry.y
+            lon_coord = row.geometry.x
+        else:
+            lat_coord = lon_coord = None
+        
+        # Create a card for each result
+        with st.container():
+            st.markdown("---")
+            
+            # Header
+            st.markdown(f"### #{idx+1} - {name}")
+            
+            # Location information
+            if lat_coord and lon_coord:
+                # Format coordinates with direction
+                lat_dir = "N" if lat_coord >= 0 else "S"
+                lon_dir = "E" if lon_coord >= 0 else "W"
+                coord_str = f"{abs(lat_coord):.4f}°{lat_dir}, {abs(lon_coord):.4f}°{lon_dir}"
+                st.markdown(f"📍 **Location**: {coord_str}")
+                
+                # Add a map link
+                map_url = f"https://www.google.com/maps?q={lat_coord},{lon_coord}"
+                st.markdown(f"🗺️ [View on Google Maps]({map_url})")
+            
+            # Additional properties in a clean format
+            if props:
+                st.markdown("**Details:**")
+                prop_display = {}
+                
+                # Filter and format properties
+                for key, value in props.items():
+                    if key not in ['name']:
+                        # Format the key to be more readable
+                        formatted_key = key.replace('_', ' ').title()
+                        prop_display[formatted_key] = value
+                
+                # Display additional properties in columns
+                if prop_display:
+                    cols = st.columns(min(3, len(prop_display)))
+                    for col_idx, (key, value) in enumerate(prop_display.items()):
+                        with cols[col_idx % len(cols)]:
+                            st.markdown(f"**{key}:** {value}")
+    
+    # Summary
+    st.markdown("---")
+    st.success(f"✅ Found **{len(results)}** feature(s) in the spatial query")
+    
+    # Show raw data in expander for developers
+    with st.expander("🔧 Raw GeoDataFrame (for developers)"):
+        st.write(results)
 
 
 # Import for map functionality
