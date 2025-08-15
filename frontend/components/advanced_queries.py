@@ -3,6 +3,14 @@ import geopandas as gpd
 from typing import Dict, Any, Optional, Tuple
 import folium
 
+# Import streamlit_folium with fallback
+try:
+    from streamlit_folium import st_folium
+except Exception:
+    def st_folium(*args, **kwargs):
+        st.warning("streamlit-folium is not available; interactive map rendering is disabled.")
+        return None
+
 
 def advanced_search_interface(retrieval_engine, spatial_engine):
     """Enhanced search interface with multiple query types"""
@@ -194,8 +202,13 @@ def bbox_query_interface(spatial_engine):
     if st.button("🔍 Find Features in Bounding Box", type="primary"):
         with st.spinner("Searching..."):
             try:
-                # This would need to be implemented in spatial_engine
-                st.info("Bounding box query not yet implemented")
+                results = spatial_engine.bbox_query(
+                    min_lat=min_lat,
+                    min_lon=min_lon,
+                    max_lat=max_lat,
+                    max_lon=max_lon
+                )
+                display_spatial_results(results, "Bounding Box Query")
             except Exception as e:
                 st.error(f"Query error: {str(e)}")
 

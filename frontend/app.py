@@ -1,6 +1,10 @@
 import json
 from pathlib import Path
 import streamlit as st
+# Ensure project root is on sys.path for absolute imports like `config.settings`
+import os
+import sys
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 # Import st_folium with a safe fallback to avoid hard dependency at app startup
 try:
     from streamlit_folium import st_folium
